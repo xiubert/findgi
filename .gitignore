@@ -131,6 +131,7 @@ dmypy.json
 #myadds
 scratch/
 data/
+notes.txt
 
 #vscode
 .vscode
