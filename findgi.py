@@ -52,6 +52,7 @@ dfW = findgi.addWeekMonthCols(findgi.updateWeather())
 weekWeather = pd.DataFrame(dfW.iloc[-7:,:].agg(np.mean)).T
 
 dfMix = findgi.getLikelyFams(famModels,weekWeather)
+famChoices = dfMix.family.to_list()
 
 #%% INIT FAM DATA
 initMushroom = 'morel'
@@ -119,10 +120,8 @@ famImg.xgrid.visible = False
 famImg.ygrid.visible = False
 
 
-#%% works: variety plot
-
-#FUTURE
-#with fam mix:  current, next week, week after that
+#%% variety plot
+#TODO: current, next week, week after that
 dfMix = dfMix.iloc[:15,:]
 dfMix['palette'] = sns.color_palette(cc.glasbey, n_colors=len(dfMix))
 dfMix['palette'] = dfMix['palette'].apply(to_hex)
@@ -146,7 +145,7 @@ famVarietyTooltips = """
     </div>
 """
 
-famVariety = figure(y_range=varietySource.data['family'], height=450, title="Top 15 most likely fungi families:",
+famVariety = figure(y_range=varietySource.data['family'], height=450, title="Top 15 most likely fungi families this week:",
            toolbar_location=None, tooltips=famVarietyTooltips, tools="",x_axis_location="above")
 famVariety.hbar(y="family", right="p(Fam | Env)", width=1.5,
        source = varietySource,
@@ -158,7 +157,6 @@ famVariety.title.text_font_size = '14pt'
 
 
 #%% MAP:
-
 dff = findgi.iNatCSV2df(findgi.getLatestObsCSV())
 dff = dff[['taxonID','decimalLatitude','decimalLongitude']]
 dff['dateFancy'] = dff.index.strftime('%b %d, %Y')
@@ -175,7 +173,6 @@ view = CDSView(source=mapSource, filters=[IndexFilter(
 mapToolTips = """
     <HTML>
     <HEAD>
-
         <style>
             .column {
                 float: left;
@@ -244,47 +241,30 @@ mapFig.title.text_font_size = '14pt'
 
 
 #%% WIDGETS:
-popFams = pFungiFam.sum().sort_values(ascending=False).index.to_list()
-
 text_input = TextInput(value=initMushroom, title="Enter mushroom:")
-select = Select(title="fungus family:", value=fam, options=popFams)
+select = Select(title="fungus family (ordered by probability):", value=fam, options=famChoices)
 
 # WIDGET CALLBACKS:
-def getFamProbQ(attrname, old, query):
-    global dfWfuture,dfW,dfRollParams,view
+def famFromTextInput(attrname, old, query):
+    global select
+    if query == "" or 'not found' in query:
+        return
+
     fam = findgi.fungiFamFromQuery(query)
-
-    #decide whether relative or absolute
-    rollParams = dfRollParams[dfRollParams.fam.eq(fam)].roll_day_span.item()
-    oneFamSource.data['existing'] = np.pad(pFungiFam[fam].values,
-                            (0,addDates['existing']),'constant',constant_values=np.nan)
-
-    #modeled
-    rollWeatherAgg = findgi.weatherAggAndRoll(dfW,
-                        rollFeatures=findgi.rollFeatures,
-                        rollSpans=rollParams,
-                        aggSpan='W')
-    oneFamSource.data['modeled'] = np.pad(famModels[fam].predict(rollWeatherAgg),
-                            (0,addDates['modeled']),'constant',constant_values=np.nan)
-    rollWeatherAggF = findgi.weatherAggAndRoll(dfWfuture,
-                      rollFeatures=findgi.rollFeatures,
-                      rollSpans=rollParams,
-                      aggSpan='W')    
-    oneFamSource.data['future'] = famModels[fam].predict(rollWeatherAggF)
-
-    try:
-        source_image.data['famImg'] = [dfFamImg[dfFamImg.family.eq(fam)].famImg.item()]
-    except:
-        pass
+    if fam is None:
+        text_input.value = f"{query} not found..."
+        return
+    #prevent bouncing
+    select.remove_on_change('value',getFamProb)
     select.value = fam
-    view.filters[0] = IndexFilter(
-        list(np.where(dff.family.eq(fam))[0]))
-
+    getFamProb('textInput', old, fam)
+    select.on_change('value',getFamProb)
 
 def getFamProb(attrname, old, fam):
     global dfWfuture,dfW,dfRollParams
-
-    #decide whether relative or absolute
+    if attrname != 'textInput':
+        text_input.value = ""
+    
     rollParams = dfRollParams[dfRollParams.fam.eq(fam)].roll_day_span.item()
     oneFamSource.data['existing'] = np.pad(pFungiFam[fam].values,
                             (0,addDates['existing']),'constant',constant_values=np.nan)
@@ -310,7 +290,7 @@ def getFamProb(attrname, old, fam):
         list(np.where(dff.family.eq(fam))[0]))
 
 
-text_input.on_change('value', getFamProbQ)
+text_input.on_change('value', famFromTextInput)
 select.on_change('value',getFamProb)
 
 desc = Div(text=open("./description.html").read(), width=800, sizing_mode="stretch_width")

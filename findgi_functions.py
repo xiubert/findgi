@@ -456,7 +456,7 @@ def rollWeather(weatherAgg,**kwargs):
         params[parameter] = value
 
     not_rolled = [f for f in weatherAgg.columns if f not in params['rollFeatures']]
-
+    
     for i,feature in enumerate(params['rollFeatures']):
         weatherAgg['roll_' + feature] = (
             weatherAgg[feature]
@@ -465,10 +465,9 @@ def rollWeather(weatherAgg,**kwargs):
             .mean())
     
     weatherRoll = weatherAgg[[c for c in weatherAgg.columns if 'roll' in c]]
-    #below causes setting with copy warning
-    weatherRoll.rename(columns={k:v for k,v in zip(weatherRoll.columns,
-                    [s.strip('roll_') for s in weatherRoll.columns])},inplace=True)
-
+    weatherRoll = weatherRoll.rename(columns={k:v for k,v in zip(weatherRoll.columns,
+                    [s.strip('roll_') for s in weatherRoll.columns])})
+  
     if not_rolled:
         weatherRoll[not_rolled] = weatherAgg[not_rolled]
 
@@ -746,11 +745,17 @@ def updateObsWithScrape():
 def fungiFamFromQuery(query,taxonKey=None):
     if not isinstance(taxonKey,pd.DataFrame):
         taxonKey = dill.load(open(getLatestTaxonKey(),'rb'))
+    
     try:
-        taxonID = int(get_inat_taxonID((query + ' mushroom' if 'mushroom' not in query else query)))
-        return taxonKey[taxonKey.taxonID.eq(taxonID)].family.item()
+        fam = taxonKey[taxonKey.preferred_common_name.str.contains(
+            query,case=False)].family.mode()[0]
     except:
-        return 'not found...'
+        try:
+            taxonID = int(get_inat_taxonID((query + ' mushroom' if 'mushroom' not in query else query)))
+            fam =  taxonKey[taxonKey.taxonID.eq(taxonID)].family.item()
+        except:
+            return None
+    return fam
 
 
 #%% PREDICTIONS
