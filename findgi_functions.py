@@ -26,7 +26,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import shuffle
 from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import train_test_split
 from sklearn.ensemble import GradientBoostingRegressor
+
 
 #%% globals
 
@@ -516,6 +518,7 @@ def getFamModels(dfRollParams,pFungiFam,weatherAgg,
     log_scaled = [feat for feat in features if feat not in not_logscale]
 
     famModels = {}
+    #generate models for each family
     for i,r in dfRollParams.iterrows():
         famModels[r.fam] = genFamModel(log_scaled,not_logscale)
 
@@ -524,9 +527,11 @@ def getFamModels(dfRollParams,pFungiFam,weatherAgg,
                             'rollSpans': r.roll_day_span})
 
         y = pFungiFam[r.fam]
-        # # X_train, X_test, y_train, y_test = train_test_split(
-        # # X, y, shuffle=True, test_size=0.30, random_state=42)
-        famModels[r.fam].fit(X,pFungiFam[r.fam])
+
+        X_train, X_test, y_train, y_test = train_test_split(
+        X, y, shuffle=True, test_size=0.25, random_state=42)
+        
+        famModels[r.fam].fit(X_train,y_train)
     
     return famModels
 
