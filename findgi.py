@@ -33,6 +33,7 @@ dModel = datetime.strptime(re.search(r'\d{4}-\d{2}-\d{2}',modelPkl)[0],'%Y-%m-%d
 
 modelParamsDir = os.path.join(os.getcwd(),'data','modelParams')
 
+#%%
 # load models
 if not modelPkl or dObs>dModel:
     famModels,dfRollParams,pFungiFam,trainWeatherAgg = \

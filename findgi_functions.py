@@ -447,7 +447,7 @@ def fungiWeatherAgg(fungiFamPivot,weather,
                             pd.Grouper(freq=str(aggSpan)+ 'D')).agg(np.mean)
   
     weatherAgg['month'] = weatherAgg.index.month
-    weatherAgg['week'] = weatherAgg.index.weekofyear
+    weatherAgg['week'] = weatherAgg.index.isocalendar().week
 
     return fungiAgg,weatherAgg
 
@@ -529,7 +529,7 @@ def getFamModels(dfRollParams,pFungiFam,weatherAgg,
         y = pFungiFam[r.fam]
 
         X_train, X_test, y_train, y_test = train_test_split(
-        X, y, shuffle=True, test_size=0.25, random_state=42)
+        X, y, shuffle=True, test_size=0.20, random_state=42)
         
         famModels[r.fam].fit(X_train,y_train)
     
@@ -757,7 +757,7 @@ def fungiFamFromQuery(query,taxonKey=None):
     except:
         try:
             taxonID = int(get_inat_taxonID((query + ' mushroom' if 'mushroom' not in query else query)))
-            fam =  taxonKey[taxonKey.taxonID.eq(taxonID)].family.item()
+            fam = taxonKey[taxonKey.taxonID.eq(taxonID)].family.item()
         except:
             return None
     return fam
