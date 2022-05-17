@@ -465,6 +465,7 @@ def rollWeather(weatherAgg,**kwargs):
             .mean())
     
     weatherRoll = weatherAgg[[c for c in weatherAgg.columns if 'roll' in c]]
+    #below causes setting with copy warning
     weatherRoll.rename(columns={k:v for k,v in zip(weatherRoll.columns,
                     [s.strip('roll_') for s in weatherRoll.columns])},inplace=True)
 
@@ -490,7 +491,7 @@ def weatherAggAndRoll(df_weather,
                             pd.Grouper(freq=str(aggSpan)+ 'D')).agg(np.mean)
 
     weatherAgg['month'] = weatherAgg.index.month
-    weatherAgg['week'] = weatherAgg.index.weekofyear
+    weatherAgg['week'] = weatherAgg.index.isocalendar().week
     
     return rollWeather(weatherAgg,**{'rollFeatures': rollFeatures,
                             'rollSpans': rollSpans})
@@ -570,7 +571,7 @@ def trainObsWeather2models(iNat_csv,weather_csv,rollParamDir):
 
 def addWeekMonthCols(df):    
     df['month'] = df.index.month
-    df['week'] = df.index.weekofyear
+    df['week'] = df.index.isocalendar().week
     return df
 
 def updateWeather(oldWeatherCSV=None,saveFile=True,
