@@ -242,8 +242,8 @@ mapFig.title.text_font_size = '14pt'
 
 
 #%% WIDGETS:
-text_input = TextInput(value=initMushroom, title="Enter mushroom:")
-select = Select(title="fungus family (ordered by probability):", value=fam, options=famChoices)
+text_input = TextInput(value=initMushroom, title="Enter mushroom (eg. honey, oyster, chanterelle):")
+select = Select(title="OR choose fungus family (ordered by probability):", value=fam, options=famChoices)
 
 # WIDGET CALLBACKS:
 def famFromTextInput(attrname, old, query):
@@ -251,7 +251,7 @@ def famFromTextInput(attrname, old, query):
     if query == "" or 'not found' in query:
         return
 
-    fam = findgi.fungiFamFromQuery(query)
+    fam = findgi.fungiFamFromQuery(query.lower())
     if fam is None:
         text_input.value = f"{query} not found..."
         return
