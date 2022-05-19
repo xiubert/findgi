@@ -16,7 +16,7 @@ import dill
 import re
 from datetime import datetime
 
-# data files
+#%% data files
 taxonKey = dill.load(open(findgi.getLatestTaxonKey(),'rb'))
 
 fWeather = glob.glob(os.path.join(os.getcwd(),'data','*weather*.zip'))
