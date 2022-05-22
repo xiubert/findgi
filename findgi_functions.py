@@ -523,32 +523,11 @@ def getRollParams(paramDirectory):
     return dfParams
 
 
-
-def genFamModel(feat_logScale,feat_notLogScale):
-    log_scale_transformer = FunctionTransformer(np.log, validate=False)
-
-    featureProcessor = ColumnTransformer(
-        transformers=[
-            ("log", log_scale_transformer, feat_logScale),
-            ("regular", 'passthrough', feat_notLogScale),
-        ]
-    )
-
-    GBR_pipe = Pipeline(
-        [
-            ('preprocessor',featureProcessor),
-            ('scale',StandardScaler()),
-            ('shuffle',FunctionTransformer(shuffle(random_state=42))),
-            ('regressor', GradientBoostingRegressor(random_state=42)),
-        ]
-    )
-
-    return GBR_pipe
-
 def addWeekMonthCols(df):    
     df['month'] = df.index.month
     df['week'] = df.index.isocalendar().week
     return df
+
 
 def updateWeather(oldWeatherCSV=None,saveFile=True,
                   elements=['datetime','temp', 'humidity', 'precip', 'windspeed']):
@@ -733,6 +712,27 @@ def fungiFamFromQuery(query,taxonKey=None):
 
 
 #%% TRAINING AND PREDICTIONS
+def genFamModel(feat_logScale,feat_notLogScale):
+    log_scale_transformer = FunctionTransformer(np.log, validate=False)
+
+    featureProcessor = ColumnTransformer(
+        transformers=[
+            ("log", log_scale_transformer, feat_logScale),
+            ("regular", 'passthrough', feat_notLogScale),
+        ]
+    )
+
+    GBR_pipe = Pipeline(
+        [
+            ('preprocessor',featureProcessor),
+            ('scale',StandardScaler()),
+            ('shuffle',FunctionTransformer(shuffle(random_state=42))),
+            ('regressor', GradientBoostingRegressor(random_state=42)),
+        ]
+    )
+
+    return GBR_pipe
+
 
 def getFamModels(dfRollParams,pFungiFam,weatherAgg,
                  features = features,
