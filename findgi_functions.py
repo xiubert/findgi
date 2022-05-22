@@ -3,21 +3,14 @@ from bs4 import BeautifulSoup
 from geopy.geocoders import Nominatim
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
-import seaborn as sns
 from retry import retry
-from datetime import datetime,timezone
+from datetime import datetime
 import ast
-import matplotlib.dates as mdates
 import os
 import glob
 from dotenv import load_dotenv
 import dill
 import shutil
-from PIL import Image
-from io import BytesIO
-import base64
 import time
 import re
 
@@ -44,7 +37,6 @@ features = rollFeatures + ['week','month']
 aggSpan = 'W'
 
 #%% Distance fcns
-
 mile2meter = lambda miles: 1609.344*miles
 mile2km = lambda miles: int(mile2meter(miles)/1000)
 deg2rad = lambda deg: (deg/180)*np.pi
@@ -339,32 +331,53 @@ def cleanScrapedObs(iNatScrapeCSV):
     return df_scrape
 
 
-def getLatestScrapeCSV():
-    fScrape = glob.glob(os.path.join(os.getcwd(),'data','obs_fungi_web_PGH*.zip'))
-    scrapeCSV = max(fScrape, key=os.path.getctime)
+def getLatestFileByFMod(fGlobPath):
+    F = glob.glob(fGlobPath)
+    latestModF = (max(F, key=os.path.getctime) if F else None)
 
-    return scrapeCSV
+    return latestModF
+
+
+def getLatestFileByFileNameDate(fGlobPath):
+    F = glob.glob(fGlobPath)
+    if not F:
+        return None
+    dates = [datetime.strptime(
+        re.search(
+            r'(?P<date>\d{4}-\d{2}-\d{2})\.[a-z]+?',el)['date'],'%Y-%m-%d')
+             for el in F]
+    
+    latestDateFidx = np.argmax(dates)
+    return F[latestDateFidx],dates[latestDateFidx]
+
+
+def getLatestScrapeCSV(): 
+    return getLatestFileByFileNameDate(
+        os.path.join(os.getcwd(),'data','obs_fungi_web_PGH*.zip')
+    )
 
 
 def getLatestTaxonKey():
-    fTaxonKey = glob.glob(os.path.join(os.getcwd(),'data','taxonKey*.pkl'))
-    taxonKeyCSV = max(fTaxonKey, key=os.path.getctime)
-
-    return taxonKeyCSV
+    return getLatestFileByFileNameDate(
+        os.path.join(os.getcwd(),'data','taxonKey*.pkl')
+    )
 
 
 def getLatestObsCSV():
-    fObs = glob.glob(os.path.join(os.getcwd(),'data','*fungi_web-w-db*.zip'))
-    iNatCSV = max(fObs, key=os.path.getctime)
-
-    return iNatCSV
+    return getLatestFileByFileNameDate(
+        os.path.join(os.getcwd(),'data','*fungi_web-w-db*.zip')
+    )
 
 
 def getLatestWeatherCSV():
-    fWeather = glob.glob(os.path.join(os.getcwd(),'data','*weather*.zip'))
-    weatherCSV = max(fWeather, key=os.path.getctime)
+    return getLatestFileByFileNameDate(
+        os.path.join(os.getcwd(),'data','*weather*.zip')
+    )
 
-    return weatherCSV
+def getLatestModelFile():
+    return getLatestFileByFileNameDate(
+        os.path.join(os.getcwd(),'data','*models*.pk')
+    )
 
 
 def weatherCSV2df(weather_csv):
@@ -510,31 +523,6 @@ def getRollParams(paramDirectory):
     return dfParams
 
 
-def getFamModels(dfRollParams,pFungiFam,weatherAgg,
-                 features = features,
-                 rollFeatures = rollFeatures,
-                 not_logscale = ['precip']):
-    
-    log_scaled = [feat for feat in features if feat not in not_logscale]
-
-    famModels = {}
-    #generate models for each family
-    for i,r in dfRollParams.iterrows():
-        famModels[r.fam] = genFamModel(log_scaled,not_logscale)
-
-        X = rollWeather(weatherAgg[features],
-                            **{'rollFeatures': rollFeatures,
-                            'rollSpans': r.roll_day_span})
-
-        y = pFungiFam[r.fam]
-
-        X_train, X_test, y_train, y_test = train_test_split(
-        X, y, shuffle=True, test_size=0.3, random_state=42)
-        
-        famModels[r.fam].fit(X_train,y_train)
-    
-    return famModels
-
 
 def genFamModel(feat_logScale,feat_notLogScale):
     log_scale_transformer = FunctionTransformer(np.log, validate=False)
@@ -556,22 +544,6 @@ def genFamModel(feat_logScale,feat_notLogScale):
     )
 
     return GBR_pipe
-
-
-
-def trainObsWeather2models(iNat_csv,weather_csv,rollParamDir):
-    
-    dfF,dfWmodels = iNatWeatherCSV2df(iNat_csv,weather_csv)
-    fungiFamPivot,fungiFamCounts = pivotObs(dfF)
-    fungiAgg,trainWeatherAgg = fungiWeatherAgg(fungiFamPivot,dfWmodels)
-    pFungiFam = fungiAgg.divide(fungiAgg.sum(axis=1),axis=0)
-
-    dfRollParams = getRollParams(rollParamDir)
-
-    famModels = getFamModels(dfRollParams,pFungiFam,trainWeatherAgg)
-
-    return famModels,dfRollParams,pFungiFam,trainWeatherAgg
-
 
 def addWeekMonthCols(df):    
     df['month'] = df.index.month
@@ -629,11 +601,11 @@ def iNatObsScrape(radius=100,reqWaitTime=0.7):
     Looks for most recent web scrape csv and scrapes iNat by fungi family
     from that date on.
     '''
-    taxonKey = dill.load(open(getLatestTaxonKey(),'rb'))
-    latestScrapeF = getLatestScrapeCSV()
+    taxonKey = dill.load(open(getLatestTaxonKey()[0],'rb'))
+    latestScrapeF,dScraped = getLatestScrapeCSV()
 
     uTaxons = taxonKey.family_taxonID.unique()
-    dateStart = re.search(r'\d{4}-\d{2}-\d{2}',latestScrapeF)[0]
+    dateStart = dScraped
 
     newstart = 0
     total = len(uTaxons)
@@ -668,11 +640,8 @@ def iNatObsScrape(radius=100,reqWaitTime=0.7):
 
 def updateObsWithScrape():   
 
-    fScrape = getLatestScrapeCSV()
-    fObs = getLatestObsCSV()
-
-    dObs = datetime.strptime(re.search(r'\d{4}-\d{2}-\d{2}',fObs)[0],'%Y-%m-%d')
-    dScrape = datetime.strptime(re.search(r'(\d{4}-\d{2}-\d{2}).zip?',fScrape)[1],'%Y-%m-%d')
+    fScrape,dScrape = getLatestScrapeCSV()
+    fObs,dObs = getLatestObsCSV()
 
     if dScrape <= dObs:
         pass 
@@ -684,11 +653,11 @@ def updateObsWithScrape():
         #only keep genus, species rank IDs
         dfs_clean = dfs_clean[dfs_clean['rank'].isin(['genus','species'])]
 
-        dff = iNatCSV2df(getLatestObsCSV())
+        dff = iNatCSV2df(getLatestObsCSV()[0])
         dff = dff.sort_index()
         dff = dff[~np.isin(dff.id,dfs_clean.id)]
 
-        taxonKey = dill.load(open(getLatestTaxonKey(),'rb'))
+        taxonKey = dill.load(open(getLatestTaxonKey()[0],'rb'))
 
         missingTaxa = dfs_clean.taxonID[~np.isin(dfs_clean.taxonID,taxonKey.taxonID.unique())].unique()
         
@@ -749,7 +718,7 @@ def updateObsWithScrape():
 
 def fungiFamFromQuery(query,taxonKey=None):
     if not isinstance(taxonKey,pd.DataFrame):
-        taxonKey = dill.load(open(getLatestTaxonKey(),'rb'))
+        taxonKey = dill.load(open(getLatestTaxonKey()[0],'rb'))
     
     try:
         fam = taxonKey[taxonKey.preferred_common_name.str.contains(
@@ -763,7 +732,56 @@ def fungiFamFromQuery(query,taxonKey=None):
     return fam
 
 
-#%% PREDICTIONS
+#%% TRAINING AND PREDICTIONS
+
+def getFamModels(dfRollParams,pFungiFam,weatherAgg,
+                 features = features,
+                 rollFeatures = rollFeatures,
+                 not_logscale = ['precip']):
+    
+    log_scaled = [feat for feat in features if feat not in not_logscale]
+
+    famModels = {}
+    testData = {}
+    #generate models for each family
+    for i,r in dfRollParams.iterrows():
+        famModels[r.fam] = genFamModel(log_scaled,not_logscale)
+
+        X = rollWeather(weatherAgg[features],
+                            **{'rollFeatures': rollFeatures,
+                            'rollSpans': r.roll_day_span})
+
+        y = pFungiFam[r.fam]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+        X, y, shuffle=True, test_size=0.3, random_state=42)
+        
+        famModels[r.fam].fit(X_train,y_train)
+        testData[r.fam] = (X_test,y_test)
+
+    return famModels,testData
+
+
+def getTrainingData(iNat_csv,weather_csv,rollParamDir):
+    dfF,dfWmodels = iNatWeatherCSV2df(iNat_csv,weather_csv)
+    fungiFamPivot,_ = pivotObs(dfF)
+    fungiAgg,trainWeatherAgg = fungiWeatherAgg(fungiFamPivot,dfWmodels)
+    pFungiFam = fungiAgg.divide(fungiAgg.sum(axis=1),axis=0)
+
+    dfRollParams = getRollParams(rollParamDir)
+
+    return dfRollParams,pFungiFam,trainWeatherAgg
+
+
+def trainObsWeather2models(iNat_csv,weather_csv,rollParamDir):
+    
+    dfRollParams,pFungiFam,trainWeatherAgg = getTrainingData(
+                                                iNat_csv,weather_csv,rollParamDir)
+
+    famModels,testData = getFamModels(dfRollParams,pFungiFam,trainWeatherAgg)
+
+    return famModels,dfRollParams,pFungiFam,trainWeatherAgg,testData
+
 
 def getLikelyFams(famModels,avWeatherWeek):
     fProbs = {}
@@ -774,170 +792,3 @@ def getLikelyFams(famModels,avWeatherWeek):
     df = df.sort_values(by=['p(Fam | Env)'],ascending=False)
 
     return df
-
-
-#%% PLOTTING
-
-def plotFit(model,X,y,axColor='black',title=None):
-    dfp = X
-    dfp['p'] = model.predict(X)
-    dfp['p_true'] = y
-    dfp = dfp.sort_index()
-
-    custom_params = {"axes.spines.right": False, 
-        "axes.spines.top": False}
-            
-    sns.set(style='ticks',font_scale=3,rc=custom_params)
-    fig, axes = plt.subplots(figsize=(20,10))
-    axes.plot(dfp.index,dfp.p_true,linewidth=7,color=axColor)
-    axes.plot(dfp.index,dfp.p,linewidth=7,color='green')
-
-    plt.ylabel('p(FungusFam) | Environment')
-    plt.title(f'{title}  |  $R^2$: {model.score(X,y):.2f}',color=axColor)
-
-    axes.grid(False)
-
-    #prettify dates
-    date_form = DateFormatter("%b, %Y")
-    axes.xaxis.set_major_formatter(date_form)
-    plt.xticks(rotation = 45)
-    #or
-    # locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
-    # formatter = mdates.ConciseDateFormatter(locator)
-    # axes.xaxis.set_major_locator(locator)
-    # axes.xaxis.set_major_formatter(formatter)
-
-    if axColor != 'black':
-        axes.spines['left'].set_color(axColor)
-        axes.spines['bottom'].set_color(axColor)
-        axes.xaxis.label.set_color(axColor)        #setting up X-axis label color to yellow
-        axes.yaxis.label.set_color(axColor)          #setting up Y-axis label color to blue
-        axes.tick_params(axis='x', colors=axColor)    #setting up X-axis tick color to red
-        axes.tick_params(axis='y', colors=axColor)  #setting up Y-axis tick color to black
-   
-    axes.spines['left'].set_linewidth(7)
-    axes.spines['bottom'].set_linewidth(7)
-    axes.tick_params(length=15,width=7)
-    
-    return fig, axes
-
-
-def plotCompare(x1,y1,x2,y2,c1='default',c2='green',
-                axColor='black',title=None):
-    custom_params = {"axes.spines.right": False, 
-        "axes.spines.top": False}
-            
-    sns.set(style='ticks',font_scale=3,rc=custom_params)
-    fig, axes = plt.subplots(figsize=(20,10))
-    axes.plot(x1,y1,linewidth=7,color=c1)
-    axes.plot(x2,y2,linewidth=7,color=c2)
-
-    plt.ylabel('p( Fam | Env )')
-    # plt.title(f'{title}  |  $R^2$: {model.score(X,y):.2f}',color=axColor)
-
-    axes.grid(False)
-
-    #prettify dates
-    date_form = DateFormatter("%b, %Y")
-    axes.xaxis.set_major_formatter(date_form)
-    plt.xticks(rotation = 45)
-    #or
-    # locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
-    # formatter = mdates.ConciseDateFormatter(locator)
-    # axes.xaxis.set_major_locator(locator)
-    # axes.xaxis.set_major_formatter(formatter)
-
-    if axColor != 'black':
-        axes.spines['left'].set_color(axColor)
-        axes.spines['bottom'].set_color(axColor)
-        axes.xaxis.label.set_color(axColor)        #setting up X-axis label color to yellow
-        axes.yaxis.label.set_color(axColor)          #setting up Y-axis label color to blue
-        axes.tick_params(axis='x', colors=axColor)    #setting up X-axis tick color to red
-        axes.tick_params(axis='y', colors=axColor)  #setting up Y-axis tick color to black
-   
-    axes.spines['left'].set_linewidth(7)
-    axes.spines['bottom'].set_linewidth(7)
-    axes.tick_params(length=15,width=7)
-    
-    return fig, axes
-
-
-#%%
-def binPlot(df,feature,response,fagg=np.mean,nbins=10):
-    plt.figure()
-    fig,axs = plt.subplots(2,2,figsize=(15, 12))
-    # fig.suptitle(feature, fontsize=16)
-
-    df[feature].hist(ax=axs[0,0],bins=nbins)
-    sns.histplot(df[feature],ax=axs[0,1],bins=nbins,stat='probability')
-
-
-    # plt.figure()
-    df.plot(ax=axs[1,0],x=feature,y=response,kind='scatter')
-
-    bins = pd.cut(df[feature],nbins)
-    df[feature + 'bin'] = bins
-
-    # plt.figure()
-    ax = df.groupby(feature + 'bin')[response].agg(fagg).plot(
-        ax=axs[1,1],
-        xticks=np.arange(0,nbins),
-        y = response,
-        ylabel=response,
-        xlabel=feature)
-
-    ax.set_xticklabels(map(str,bins.cat.categories.right))
-
-    fig.tight_layout()
-
-def binCompare(df,df_model,feature,response,fagg=np.mean,nbins=15):
-    for i,f in enumerate([df,df_model]):
-        bins = pd.cut(f[feature],nbins)
-        f[feature + 'bin'] = bins
-        # ax = []
-        f.groupby(feature + 'bin')[response].agg(fagg).plot(
-            y = response,
-            ylabel=response,
-            xlabel=feature)
-        # plt.set_xticklabels(map(str,bins.cat.categories.right))
-
-#%% misc for prep
-
-def gridImg(fam):
-    imgf = glob.glob(os.path.join(os.getcwd(),'data','images',f'{fam}_*'))
-    imgs = []
-    [imgs.append(Image.open(i)) for i in imgf]
-    sizes = []
-    [sizes.append(i.size) for i in imgs]
-
-    gridY = max(sum([y for x,y in sizes[1::2]]),
-                sum([y for x,y in sizes[::2]]))
-    gridX = max([a+b for a,b in 
-            zip([x for x,y in sizes[::2]],
-                [x for x,y in sizes[1::2]])])
-                
-    new_image = Image.new('RGBA',
-                (gridX,gridY), (255,255,255,0))
-
-    new_image.paste(imgs[0],(0,0))
-    new_image.paste(imgs[1],(sizes[0][0],0))
-
-    new_image.paste(imgs[2],(0,sizes[0][1]))
-    new_image.paste(imgs[3],(sizes[2][0],sizes[1][1]))
-    
-    new_image.paste(imgs[4],(0,sizes[0][1]+sizes[2][1]))
-    new_image.paste(imgs[5],(sizes[4][0],sizes[1][1]+sizes[3][1]))
-    
-    # return new_image
-    # new_image.show()
-    new_image.save(os.path.join(os.getcwd(),'data','images',f'{fam}.png'),
-                    "PNG")
-
-#this actually works taking image data from gridImg
-def image_formatter(im):
-    with BytesIO() as buffer:
-        im.save(buffer, 'png')
-        data = base64.encodebytes(buffer.getvalue()).decode('utf-8')
-    
-    return f"data:image/png;base64,{data}" # <--------- this prefix is crucial
-    

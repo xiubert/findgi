@@ -10,26 +10,16 @@ from bokeh.plotting import figure, gmap
 import colorcet as cc
 import seaborn as sns
 from matplotlib.colors import to_hex
-import glob
 import os
 import dill
 import re
-from datetime import datetime
 
-#%% data files
-taxonKey = dill.load(open(findgi.getLatestTaxonKey(),'rb'))
+#%% load data files
+taxonKey = dill.load(open(findgi.getLatestTaxonKey()[0],'rb'))
 
-fWeather = glob.glob(os.path.join(os.getcwd(),'data','*weather*.zip'))
-weatherCSV = max(fWeather, key=os.path.getctime)
-
-fObs = glob.glob(os.path.join(os.getcwd(),'data','*fungi_web-w-db*.zip'))
-iNatCSV = max(fObs, key=os.path.getctime)
-
-fModel = glob.glob(os.path.join(os.getcwd(),'data','*models*.pk'))
-modelPkl = (max(fModel, key=os.path.getctime) if fModel else None)
-
-dObs = datetime.strptime(re.search(r'\d{4}-\d{2}-\d{2}',iNatCSV)[0],'%Y-%m-%d')
-dModel = datetime.strptime(re.search(r'\d{4}-\d{2}-\d{2}',modelPkl)[0],'%Y-%m-%d')
+weatherCSV,dWeather = findgi.getLatestWeatherCSV()
+iNatCSV,dObs = findgi.getLatestObsCSV()
+modelPkl,dModel = findgi.getLatestModelFile()
 
 modelParamsDir = os.path.join(os.getcwd(),'data','modelParams')
 
@@ -158,7 +148,7 @@ famVariety.title.text_font_size = '14pt'
 
 
 #%% MAP:
-dff = findgi.iNatCSV2df(findgi.getLatestObsCSV())
+dff = findgi.iNatCSV2df(findgi.getLatestObsCSV()[0])
 dff = dff[['taxonID','decimalLatitude','decimalLongitude']]
 dff['dateFancy'] = dff.index.strftime('%b %d, %Y')
 
