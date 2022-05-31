@@ -19,7 +19,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils import shuffle
 from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import GradientBoostingRegressor
 
 
@@ -712,7 +712,7 @@ def fungiFamFromQuery(query,taxonKey=None):
 
 
 #%% TRAINING AND PREDICTIONS
-def genFamModel(feat_logScale,feat_notLogScale):
+def genFamModel(feat_logScale,feat_notLogScale,fit_params=None):
     log_scale_transformer = FunctionTransformer(np.log, validate=False)
 
     featureProcessor = ColumnTransformer(
@@ -722,14 +722,23 @@ def genFamModel(feat_logScale,feat_notLogScale):
         ]
     )
 
-    GBR_pipe = Pipeline(
-        [
-            ('preprocessor',featureProcessor),
-            ('scale',StandardScaler()),
-            ('shuffle',FunctionTransformer(shuffle(random_state=42))),
-            ('regressor', GradientBoostingRegressor(random_state=42)),
-        ]
-    )
+    if fit_params:
+        fit_params['random_state'] = 42
+        GBR_pipe = Pipeline(
+            [
+                ('preprocessor',featureProcessor),
+                ('scale',StandardScaler()),
+                ('regressor', GradientBoostingRegressor(**fit_params))
+            ]
+        )
+    else:
+        GBR_pipe = Pipeline(
+            [
+                ('preprocessor',featureProcessor),
+                ('scale',StandardScaler()),
+                ('regressor', GradientBoostingRegressor(random_state=42))
+            ]
+        )
 
     return GBR_pipe
 
@@ -753,11 +762,11 @@ def getFamModels(dfRollParams,pFungiFam,weatherAgg,
 
         y = pFungiFam[r.fam]
 
-        X_train, X_test, y_train, y_test = train_test_split(
-        X, y, shuffle=True, test_size=0.3, random_state=42)
+        tscv = TimeSeriesSplit(n_splits=2)
+        trainIDX, testIDX = list(tscv.split(X, y))[-1]
         
-        famModels[r.fam].fit(X_train,y_train)
-        testData[r.fam] = (X_test,y_test)
+        famModels[r.fam].fit(X[trainIDX],y[trainIDX])
+        testData[r.fam] = (X[testIDX],y[testIDX])
 
     return famModels,testData
 

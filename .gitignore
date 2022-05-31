@@ -132,6 +132,7 @@ dmypy.json
 scratch/
 data/
 notes.txt
+testing.py
 
 #vscode
 .vscode
