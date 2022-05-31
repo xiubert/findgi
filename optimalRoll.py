@@ -36,7 +36,7 @@ for i,fam in enumerate(famcts.index[:10]):
     count = 0
     for rollPerm in permutations(range(1,weekRange),4):
         count+=1
-        print(f'fam:{i} | {count}/{nPerms}')
+        print(f'fam:{i+1} | {count}/{nPerms}')
 
         gsGBR = GridSearchCV(
             estimator=findgi.genFamModel(log_scaled,not_logscale),
@@ -54,17 +54,18 @@ for i,fam in enumerate(famcts.index[:10]):
         gsGBR.fit(X,y)
         print(gsGBR.best_params_)
         fit = gsGBR.score(X,y)
-        print(f'fam:{i} | {fit}') 
+        print(f'fam:{i+1} | {fit}') 
         if fit>fitScore:
             fitScore = fit
             roll_days = list(rollPerm)
+            bestParams = gsGBR.best_params_
 
         famparams = {'fam': fam,
-                        'famidx': i,
+                        'famidx': i+1,
                         'fitScore': fitScore,
-                        'bestParams': gsGBR.best_params_,
+                        'bestParams': bestParams,
                         'roll_features': findgi.rollFeatures,
                         'roll_day_span': roll_days}
-    dill.dump(famparams, open(f'./data/optRoll/{i:03}_famParams_{fam}.pkd', 'wb'))
+    dill.dump(famparams, open(f'./data/optRoll/{(i+1):03}_famParams_{fam}.pkd', 'wb'))
     
 
